@@ -29,7 +29,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Any, Generator
+from typing import Optional, Any
 import hashlib
 
 from .trace_schema import (
@@ -40,11 +40,6 @@ from .trace_schema import (
 )
 from .trace_logger import TraceLogger
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -90,6 +85,44 @@ class AgentConfig:
             model_name="mistral-7b",
             model_path="mistralai/Mistral-7B-Instruct-v0.3",
         )
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "model_name": self.model_name,
+            "model_path": self.model_path,
+            "max_steps": self.max_steps,
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "timeout_seconds": self.timeout_seconds,
+            "observation_type": self.observation_type,
+            "action_space": self.action_space,
+            "device": self.device,
+            "load_in_4bit": self.load_in_4bit,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "AgentConfig":
+        """Deserialize from dictionary.
+
+        Args:
+            data: Dictionary with AgentConfig fields.
+
+        Returns:
+            Reconstructed AgentConfig.
+        """
+        return cls(
+            model_name=data["model_name"],
+            model_path=data["model_path"],
+            max_steps=data.get("max_steps", 50),
+            temperature=data.get("temperature", 0.0),
+            max_tokens=data.get("max_tokens", 1024),
+            timeout_seconds=data.get("timeout_seconds", 300),
+            observation_type=data.get("observation_type", "accessibility_tree"),
+            action_space=data.get("action_space", "bid"),
+            device=data.get("device", "cuda"),
+            load_in_4bit=data.get("load_in_4bit", False),
+        )
 
 
 @dataclass 
@@ -104,6 +137,38 @@ class TaskConfig:
     
     # Evaluation
     eval_type: str = "programmatic"  # or "llm_judge", "exact_match"
+    
+    def to_dict(self) -> dict:
+        """Serialize to dictionary."""
+        return {
+            "task_id": self.task_id,
+            "task_description": self.task_description,
+            "website": self.website,
+            "benchmark": self.benchmark,
+            "start_url": self.start_url,
+            "reference_answer": self.reference_answer,
+            "eval_type": self.eval_type,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: dict) -> "TaskConfig":
+        """Deserialize from dictionary.
+
+        Args:
+            data: Dictionary with TaskConfig fields.
+
+        Returns:
+            Reconstructed TaskConfig.
+        """
+        return cls(
+            task_id=data["task_id"],
+            task_description=data["task_description"],
+            website=data["website"],
+            benchmark=data.get("benchmark", "webarena"),
+            start_url=data.get("start_url"),
+            reference_answer=data.get("reference_answer"),
+            eval_type=data.get("eval_type", "programmatic"),
+        )
 
 
 # =============================================================================

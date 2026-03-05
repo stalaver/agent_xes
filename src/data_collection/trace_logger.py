@@ -31,11 +31,6 @@ from .trace_schema import (
     generate_trace_id, get_current_timestamp
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
 logger = logging.getLogger(__name__)
 
 
@@ -314,7 +309,7 @@ class TraceLogger:
         
         return None
     
-    def _flush_batch(self) -> Path:
+    def _flush_batch(self) -> Optional[Path]:
         """Flush the batch buffer to disk (must hold lock)."""
         if not self._batch_buffer:
             return None
@@ -496,59 +491,3 @@ class TraceLoggerContext:
         """Set the outcome before exiting the context."""
         self._outcome = outcome
         self._failure_type = failure_type
-
-
-# Example usage
-if __name__ == "__main__":
-    from .trace_schema import ActionRecord, ObservationRecord, ReasoningRecord, ActionType, ElementState
-    
-    # Create logger
-    logger_instance = TraceLogger(
-        base_dir="data/raw_traces",
-        benchmark="webarena",
-        model="llama-3.2-3b",
-        auto_save=True,
-    )
-    
-    # Start a trace
-    trace_id = logger_instance.start_trace(
-        task_id="task_001",
-        task_description="Find and purchase the cheapest laptop",
-        website="shopping.webarena.dev",
-    )
-    
-    # Log some steps
-    for i in range(5):
-        step = TraceStep(
-            step_number=i + 1,
-            reasoning=ReasoningRecord(
-                raw_reasoning=f"Step {i+1}: Looking for element...",
-                intent="search",
-            ),
-            action=ActionRecord(
-                type=ActionType.CLICK,
-                selector=f"#element-{i}",
-            ),
-            observation=ObservationRecord(
-                element_found=True,
-                element_state=ElementState.VISIBLE,
-                http_status=200,
-            ),
-            dom_hash=f"hash_{i}",
-            timestamp=get_current_timestamp(),
-        )
-        logger_instance.log_step(step)
-    
-    # Finalize
-    trace = logger_instance.finalize_trace(
-        outcome=TaskOutcome.FAILURE,
-        failure_type=FailureType.NAVIGATION,
-    )
-    
-    # Print stats
-    logger_instance.print_stats()
-    
-    # Load and verify
-    loaded = logger_instance.load_trace(trace_id)
-    if loaded:
-        print(f"\n✓ Successfully loaded trace with {loaded.total_steps} steps")
