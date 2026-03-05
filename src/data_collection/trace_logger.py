@@ -25,7 +25,7 @@ from collections import defaultdict
 import threading
 import gzip
 
-from trace_schema import (
+from .trace_schema import (
     AgentTrace, TraceStep, TraceMetadata, 
     TaskOutcome, FailureType,
     generate_trace_id, get_current_timestamp
@@ -500,7 +500,7 @@ class TraceLoggerContext:
 
 # Example usage
 if __name__ == "__main__":
-    from trace_schema import ActionRecord, ObservationRecord, ReasoningRecord, ActionType, ElementState
+    from .trace_schema import ActionRecord, ObservationRecord, ReasoningRecord, ActionType, ElementState
     
     # Create logger
     logger_instance = TraceLogger(

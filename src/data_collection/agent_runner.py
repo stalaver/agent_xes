@@ -32,13 +32,13 @@ from pathlib import Path
 from typing import Optional, Any, Generator
 import hashlib
 
-from trace_schema import (
+from .trace_schema import (
     AgentTrace, TraceStep, TraceMetadata,
     ActionRecord, ObservationRecord, ReasoningRecord,
     TaskOutcome, FailureType, ActionType, SelectorType, ElementState,
     generate_trace_id, get_current_timestamp,
 )
-from trace_logger import TraceLogger
+from .trace_logger import TraceLogger
 
 # Configure logging
 logging.basicConfig(
