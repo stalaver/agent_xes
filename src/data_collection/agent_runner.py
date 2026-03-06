@@ -20,17 +20,13 @@ Author: Sergio Talavera
 Project: Early Failure Detection in Web Navigation Agents via Closed Sequential Pattern Mining
 """
 
+import hashlib
 import json
 import logging
-import os
 import re
-import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Any
-import hashlib
+from typing import Optional
 
 from .trace_schema import (
     AgentTrace, TraceStep, TraceMetadata,
@@ -431,12 +427,13 @@ class ReasoningParser:
 # =============================================================================
 
 class BaseAgentRunner(ABC):
+    """Abstract base for agent execution.
+
+    Subclasses must implement ``run_task`` which owns the full lifecycle
+    of a single task execution (env creation, agent loop, trace finalization).
+    Concrete helpers for step construction and DOM hashing are provided here.
     """
-    Abstract base class for agent execution.
-    
-    Subclasses implement benchmark-specific execution logic.
-    """
-    
+
     def __init__(
         self,
         agent_config: AgentConfig,
@@ -446,43 +443,25 @@ class BaseAgentRunner(ABC):
         self.trace_logger = trace_logger
         self.action_parser = ActionParser()
         self.reasoning_parser = ReasoningParser()
-        
-        # Model (lazy loaded)
+
         self._model = None
         self._tokenizer = None
-    
+
     @abstractmethod
     def run_task(self, task: TaskConfig) -> AgentTrace:
-        """
-        Execute a single task and return the trace.
-        
+        """Execute a single task and return the complete trace.
+
         Args:
-            task: Task configuration
-            
+            task: Task configuration.
+
         Returns:
-            Complete AgentTrace
+            Complete AgentTrace.
         """
-        pass
-    
-    @abstractmethod
-    def get_observation(self, env) -> dict:
-        """Get observation from environment."""
-        pass
-    
-    @abstractmethod
-    def execute_action(self, env, action: ActionRecord) -> dict:
-        """Execute action in environment and return result."""
-        pass
-    
-    @abstractmethod
-    def check_task_completion(self, env, task: TaskConfig) -> TaskOutcome:
-        """Check if task is complete and determine outcome."""
-        pass
-    
+
     def _compute_dom_hash(self, dom_content: str) -> str:
         """Compute hash of DOM content for change tracking."""
         return hashlib.md5(dom_content.encode()).hexdigest()[:8]
-    
+
     def _create_step(
         self,
         step_num: int,
@@ -529,6 +508,12 @@ class BrowserGymAgentRunner(BaseAgentRunner):
     - WorkArena
     """
     
+    BENCHMARK_MODULES = {
+        "miniwob": "browsergym.miniwob",
+        "webarena": "browsergym.webarena",
+        "workarena": "browsergym.workarena",
+    }
+
     def __init__(
         self,
         agent_config: AgentConfig,
@@ -539,14 +524,21 @@ class BrowserGymAgentRunner(BaseAgentRunner):
         super().__init__(agent_config, trace_logger)
         self.benchmark = benchmark
         self.headless = headless
-        
-        # Import BrowserGym components
+        self._gymnasium = None
+
         try:
-            from browsergym.core.env import BrowserEnv
-            self.BrowserEnv = BrowserEnv
-        except ImportError:
-            logger.warning("BrowserGym not installed. Install with: pip install browsergym")
-            self.BrowserEnv = None
+            import gymnasium
+            self._gymnasium = gymnasium
+
+            module_name = self.BENCHMARK_MODULES.get(benchmark)
+            if module_name:
+                import importlib
+                importlib.import_module(module_name)
+                logger.info(f"Registered BrowserGym environments for {benchmark}")
+            else:
+                logger.warning(f"Unknown benchmark '{benchmark}', skipping env registration")
+        except ImportError as e:
+            logger.warning(f"BrowserGym not installed: {e}")
     
     def load_model(self):
         """Load the LLM model for agent execution."""
@@ -559,6 +551,8 @@ class BrowserGymAgentRunner(BaseAgentRunner):
         import torch
         
         self._tokenizer = AutoTokenizer.from_pretrained(self.config.model_path)
+        if self._tokenizer.pad_token is None:
+            self._tokenizer.pad_token = self._tokenizer.eos_token
         
         load_kwargs = {
             "torch_dtype": torch.float16,
@@ -575,170 +569,199 @@ class BrowserGymAgentRunner(BaseAgentRunner):
         
         logger.info(f"Model loaded: {self.config.model_name}")
     
+    def _flatten_axtree(self, obs: dict) -> str:
+        """Flatten the BrowserGym accessibility tree observation to text.
+
+        Args:
+            obs: Observation dict from gymnasium env.reset() / env.step().
+
+        Returns:
+            Text representation of the accessibility tree.
+        """
+        axtree_obj = obs.get("axtree_object")
+        if axtree_obj is not None:
+            try:
+                from browsergym.utils.obs import flatten_axtree_to_str
+                return flatten_axtree_to_str(axtree_obj)
+            except ImportError:
+                pass
+
+            # Fallback: walk the tree manually
+            return self._walk_axtree_node(axtree_obj, depth=0)
+
+        # Last resort: return any text-like field available
+        for key in ("axtree_txt", "dom_txt", "pruned_html"):
+            if obs.get(key):
+                return obs[key]
+        return ""
+
+    @staticmethod
+    def _walk_axtree_node(node: dict, depth: int = 0) -> str:
+        """Recursively format an axtree_object dict into indented text."""
+        if not isinstance(node, dict):
+            return str(node)
+
+        role = node.get("role", "")
+        name = node.get("name", "")
+        bid = node.get("browsergym_id", "") or node.get("bid", "")
+        value = node.get("value", "")
+
+        parts: list[str] = []
+        if role:
+            parts.append(role)
+        if name:
+            parts.append(f"'{name}'")
+        if bid:
+            parts.append(f"[bid={bid}]")
+        if value:
+            parts.append(f"value='{value}'")
+
+        indent = "  " * depth
+        line = f"{indent}{' '.join(parts)}" if parts else ""
+
+        lines = [line] if line else []
+        for child in node.get("children", []):
+            lines.append(BrowserGymAgentRunner._walk_axtree_node(child, depth + 1))
+
+        return "\n".join(lines)
+
     def run_task(self, task: TaskConfig) -> AgentTrace:
-        """Execute a task using BrowserGym."""
-        if self.BrowserEnv is None:
-            raise RuntimeError("BrowserGym not available")
-        
-        # Ensure model is loaded
+        """Execute a task using BrowserGym's gymnasium API.
+
+        Creates a gymnasium environment for the task, runs a ReAct agent loop
+        (observe -> reason -> act) up to max_steps, and returns the full trace.
+
+        Args:
+            task: Task configuration with task_id, description, etc.
+
+        Returns:
+            Complete AgentTrace with all steps and outcome metadata.
+        """
+        if self._gymnasium is None:
+            raise RuntimeError("BrowserGym not available — gymnasium failed to import")
+
         self.load_model()
-        
-        # Start trace
+
         trace_id = self.trace_logger.start_trace(
             task_id=task.task_id,
             task_description=task.task_description,
             website=task.website,
             model=self.config.model_name,
         )
-        
-        # Create environment
-        env = self.BrowserEnv(
-            task_entrypoint=self._get_task_entrypoint(task),
-            headless=self.headless,
-        )
-        
+
+        env_id = f"browsergym/{self._get_task_entrypoint(task)}"
+        env = self._gymnasium.make(env_id, headless=self.headless)
+
+        outcome = TaskOutcome.ERROR
+        failure_type = None
+        reward = 0.0
+
         try:
             obs, info = env.reset()
-            
+            goal = obs.get("goal", task.task_description)
+
             for step_num in range(1, self.config.max_steps + 1):
-                # Get observation
-                obs_data = self.get_observation(env)
-                
-                # Generate agent response
+                axtree_text = self._flatten_axtree(obs)
+                obs_data = {
+                    "url": obs.get("url", ""),
+                    "axtree_text": axtree_text,
+                    "focused_element": obs.get("focused_element_bid", ""),
+                }
+
                 reasoning, action_str, token_usage = self._generate_action(
-                    task.task_description,
-                    obs_data,
-                    step_num,
+                    goal, obs_data, step_num,
                 )
-                
-                # Parse and execute action
-                action = self.action_parser.parse(action_str)
-                result = self.execute_action(env, action)
-                
-                # Create and log step
+
+                prev_url = obs.get("url", "")
+                obs, reward, terminated, truncated, info = env.step(action_str)
+                new_url = obs.get("url", "")
+
+                action_error = info.get("action_error", False) if isinstance(info, dict) else False
+                error_msg = str(info.get("error_message", "")) if isinstance(info, dict) and info.get("error_message") else None
+
+                obs_record = {
+                    "element_found": not action_error,
+                    "element_state": "not_found" if action_error else "visible",
+                    "page_changed": new_url != prev_url,
+                    "error_message": error_msg,
+                }
+
                 step = self._create_step(
                     step_num=step_num,
                     reasoning=reasoning,
                     action_str=action_str,
-                    observation=result,
-                    url=obs_data.get("url", ""),
-                    dom_content=obs_data.get("dom", ""),
+                    observation=obs_record,
+                    url=prev_url,
+                    dom_content=axtree_text,
                     token_usage=token_usage,
                 )
                 self.trace_logger.log_step(step)
-                
-                # Check for stop action or completion
-                if action.type == ActionType.STOP:
+
+                if terminated or truncated:
                     break
-                
-                # Check task completion
-                outcome = self.check_task_completion(env, task)
-                if outcome != TaskOutcome.UNKNOWN:
-                    break
-                
-                # Get new observation
-                obs, reward, done, truncated, info = env.step(action_str)
-                
-                if done or truncated:
-                    break
-            
-            # Determine final outcome
-            outcome = self.check_task_completion(env, task)
-            failure_type = self._classify_failure(outcome) if outcome == TaskOutcome.FAILURE else None
-            
+
+            if reward > 0:
+                outcome = TaskOutcome.SUCCESS
+            elif terminated or truncated:
+                outcome = TaskOutcome.FAILURE
+            else:
+                outcome = TaskOutcome.TIMEOUT
+
+            if outcome == TaskOutcome.FAILURE:
+                failure_type = FailureType.NATURAL
+
         except Exception as e:
-            logger.error(f"Task execution error: {e}")
+            logger.error(f"Task execution error for {task.task_id}: {e}", exc_info=True)
             outcome = TaskOutcome.ERROR
             failure_type = None
         finally:
             env.close()
-        
-        # Finalize trace
+
         trace = self.trace_logger.finalize_trace(
             outcome=outcome,
             failure_type=failure_type,
         )
-        
         return trace
     
-    def get_observation(self, env) -> dict:
-        """Extract observation from BrowserGym environment."""
-        obs = env.observation_handler.get_observation()
-        
-        return {
-            "url": obs.get("url", ""),
-            "dom": obs.get("dom_txt", "") or obs.get("axtree_txt", ""),
-            "screenshot": obs.get("screenshot"),
-            "focused_element": obs.get("focused_element_bid"),
-        }
-    
-    def execute_action(self, env, action: ActionRecord) -> dict:
-        """Execute action in BrowserGym environment."""
-        try:
-            # BrowserGym uses string actions
-            action_str = action.raw_action or self._format_action(action)
-            obs, reward, done, truncated, info = env.step(action_str)
-            
-            return {
-                "element_found": not info.get("action_error", False),
-                "element_state": "visible" if not info.get("action_error") else "not_found",
-                "page_changed": info.get("page_changed", False),
-                "error_message": info.get("error_message"),
-            }
-        except Exception as e:
-            return {
-                "element_found": False,
-                "element_state": "not_found",
-                "error_message": str(e),
-            }
-    
-    def check_task_completion(self, env, task: TaskConfig) -> TaskOutcome:
-        """Check task completion using environment's evaluator."""
-        try:
-            # BrowserGym provides reward signal
-            if hasattr(env, 'get_reward'):
-                reward = env.get_reward()
-                if reward > 0:
-                    return TaskOutcome.SUCCESS
-                elif reward < 0:
-                    return TaskOutcome.FAILURE
-            
-            return TaskOutcome.UNKNOWN
-        except Exception:
-            return TaskOutcome.UNKNOWN
-    
     def _get_task_entrypoint(self, task: TaskConfig) -> str:
-        """Get BrowserGym task entrypoint from task config."""
-        # This maps task IDs to BrowserGym task entrypoints
-        # Format varies by benchmark
-        if self.benchmark == "webarena":
-            return f"webarena.{task.task_id}"
-        elif self.benchmark == "miniwob":
-            return f"miniwob.{task.task_id}"
-        elif self.benchmark == "workarena":
-            return f"workarena.{task.task_id}"
-        else:
+        """Map TaskConfig.task_id to a BrowserGym gymnasium env name.
+
+        If the task_id is already prefixed with the benchmark name
+        (e.g. ``miniwob.click-test``), return it as-is.  Otherwise
+        prepend the benchmark.
+
+        Args:
+            task: Task configuration.
+
+        Returns:
+            String like ``miniwob.click-test`` suitable for
+            ``gymnasium.make(f"browsergym/{entrypoint}")``.
+        """
+        if task.task_id.startswith(f"{self.benchmark}."):
             return task.task_id
+        return f"{self.benchmark}.{task.task_id}"
     
     def _generate_action(
         self,
-        task: str,
+        goal: str,
         observation: dict,
         step_num: int,
     ) -> tuple[str, str, dict]:
-        """
-        Generate agent action using the LLM.
-        
+        """Generate agent action using the LLM.
+
+        Args:
+            goal: Natural-language task description.
+            observation: Dict with ``url``, ``axtree_text``, etc.
+            step_num: Current step number (1-based).
+
         Returns:
-            Tuple of (reasoning, action, token_usage)
+            Tuple of (reasoning, action_string, token_usage_dict).
         """
-        # Construct prompt
-        prompt = self._construct_prompt(task, observation, step_num)
-        
-        # Generate response
-        inputs = self._tokenizer(prompt, return_tensors="pt")
+        prompt = self._construct_prompt(goal, observation, step_num)
+
+        inputs = self._tokenizer(prompt, return_tensors="pt", truncation=True)
         inputs = {k: v.to(self._model.device) for k, v in inputs.items()}
-        
+
         import torch
         with torch.no_grad():
             outputs = self._model.generate(
@@ -748,110 +771,114 @@ class BrowserGymAgentRunner(BaseAgentRunner):
                 do_sample=self.config.temperature > 0,
                 pad_token_id=self._tokenizer.eos_token_id,
             )
-        
+
         response = self._tokenizer.decode(
             outputs[0][inputs["input_ids"].shape[1]:],
             skip_special_tokens=True,
         )
-        
-        # Parse response into reasoning and action
+
         reasoning, action = self._parse_response(response)
-        
-        # Token usage
+
         token_usage = {
             "prompt_tokens": inputs["input_ids"].shape[1],
             "completion_tokens": outputs.shape[1] - inputs["input_ids"].shape[1],
         }
-        
+
         return reasoning, action, token_usage
-    
-    def _construct_prompt(self, task: str, observation: dict, step_num: int) -> str:
-        """Construct the prompt for the agent."""
-        # ReAct-style prompt
-        prompt = f"""You are a web navigation agent. Complete the following task:
 
-Task: {task}
+    def _construct_prompt(self, goal: str, observation: dict, step_num: int) -> str:
+        """Build a ReAct-style prompt using BrowserGym function-call actions.
 
-Current URL: {observation.get('url', 'unknown')}
+        Args:
+            goal: The task the agent must accomplish.
+            observation: Dict with ``url``, ``axtree_text``, etc.
+            step_num: Current step number.
 
-Page Content (Accessibility Tree):
-{observation.get('dom', '')[:4000]}
+        Returns:
+            Formatted prompt string.
+        """
+        axtree = observation.get("axtree_text", "")[:4000]
+        url = observation.get("url", "unknown")
 
-Think step by step about what action to take next, then provide your action.
+        return (
+            "You are a web navigation agent. You interact with web pages "
+            "using these actions:\n"
+            '- click(element_id): Click on an element\n'
+            '- fill(element_id, "text"): Type text into an input field\n'
+            "- scroll(x, y): Scroll the page\n"
+            '- goto("url"): Navigate to a URL\n'
+            '- send_msg_to_user("message"): Send a message (use when done)\n'
+            "\n"
+            f"Current task: {goal}\n"
+            "\n"
+            f"Current URL: {url}\n"
+            "\n"
+            "Current page content (accessibility tree):\n"
+            f"{axtree}\n"
+            "\n"
+            "Based on the current page, provide your reasoning and next action.\n"
+            "\n"
+            "Thought: <your step-by-step reasoning>\n"
+            "Action: <one action to execute>\n"
+            "\n"
+            f"Step {step_num}:\n"
+        )
 
-Format your response as:
-Thought: [your reasoning]
-Action: [action_type][selector or value]
+    # Regex tiers for extracting a BrowserGym action from LLM output
+    _RE_ACTION_LABEL = re.compile(
+        r"Action:\s*(.+?)(?:\n|$)", re.IGNORECASE
+    )
+    _RE_FUNC_CALL = re.compile(
+        r"(click|fill|scroll|goto|go_back|send_msg_to_user|select_option|hover|noop)"
+        r"\s*\(.*?\)",
+        re.IGNORECASE | re.DOTALL,
+    )
+    _RE_THOUGHT = re.compile(
+        r"(?:Thought|Reasoning):\s*(.+?)(?=Action:|$)",
+        re.IGNORECASE | re.DOTALL,
+    )
+    _FALLBACK_ACTION = 'send_msg_to_user("could not parse action")'
 
-Available actions:
-- click[element_id] - Click on an element
-- type[element_id][text] - Type text into an element
-- scroll[direction] - Scroll up or down
-- goto[url] - Navigate to a URL
-- stop[answer] - Complete the task
-
-Step {step_num}:
-"""
-        return prompt
-    
     def _parse_response(self, response: str) -> tuple[str, str]:
-        """Parse LLM response into reasoning and action."""
+        """Parse LLM response into (reasoning, action_string).
+
+        Uses a multi-tier approach so that malformed output from small
+        models still produces a usable (or gracefully failing) action
+        rather than crashing.
+        """
         reasoning = ""
         action = ""
-        
-        # Look for Thought/Reasoning section
-        thought_match = re.search(
-            r"(?:Thought|Reasoning):\s*(.+?)(?=Action:|$)",
-            response,
-            re.IGNORECASE | re.DOTALL
-        )
+
+        thought_match = self._RE_THOUGHT.search(response)
         if thought_match:
             reasoning = thought_match.group(1).strip()
-        
-        # Look for Action section
-        action_match = re.search(
-            r"Action:\s*(.+?)(?:\n|$)",
-            response,
-            re.IGNORECASE
-        )
+
+        # Tier 1: look for "Action: <something>"
+        action_match = self._RE_ACTION_LABEL.search(response)
         if action_match:
-            action = action_match.group(1).strip()
-        else:
-            # Try to find any action pattern
-            action_pattern = re.search(
-                r"(click|type|scroll|goto|stop)\s*[\[\(]",
-                response,
-                re.IGNORECASE
+            candidate = action_match.group(1).strip()
+            # Verify it looks like a function call
+            if self._RE_FUNC_CALL.search(candidate):
+                func = self._RE_FUNC_CALL.search(candidate)
+                action = func.group(0)
+            else:
+                action = candidate
+
+        # Tier 2: scan the whole response for any function-call pattern
+        if not action:
+            func_match = self._RE_FUNC_CALL.search(response)
+            if func_match:
+                action = func_match.group(0)
+
+        # Tier 3: nothing parseable — emit a safe noop
+        if not action:
+            logger.warning(
+                "Could not parse action from LLM output: %s",
+                response[:200],
             )
-            if action_pattern:
-                # Extract from this point
-                start = action_pattern.start()
-                action = response[start:].split("\n")[0].strip()
-        
+            action = self._FALLBACK_ACTION
+
         return reasoning, action
-    
-    def _format_action(self, action: ActionRecord) -> str:
-        """Format ActionRecord as string for BrowserGym."""
-        if action.bid:
-            if action.value:
-                return f"{action.type.value}(bid='{action.bid}', text='{action.value}')"
-            return f"{action.type.value}(bid='{action.bid}')"
-        elif action.selector:
-            if action.value:
-                return f"{action.type.value}[{action.selector}][{action.value}]"
-            return f"{action.type.value}[{action.selector}]"
-        return action.raw_action or ""
-    
-    def _classify_failure(self, outcome: TaskOutcome) -> Optional[FailureType]:
-        """
-        Classify failure type based on trace patterns.
-        
-        Note: This is a placeholder. Full classification will be done
-        during annotation phase using the failure taxonomy.
-        """
-        # For now, mark as natural (uninjected) failure
-        # Detailed classification happens in annotation phase
-        return FailureType.NATURAL
 
 
 # =============================================================================
