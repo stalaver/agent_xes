@@ -153,9 +153,12 @@ def generate_synthetic_traces(n_traces: int = 100) -> list[AgentTrace]:
     """
     traces: list[AgentTrace] = []
 
+    n_scenarios = len(FAILURE_SCENARIOS)
+    n_websites = len(WEBSITES)
+
     for i in range(n_traces):
-        scenario = FAILURE_SCENARIOS[i % len(FAILURE_SCENARIOS)]
-        website = WEBSITES[i % len(WEBSITES)]
+        scenario = FAILURE_SCENARIOS[i % n_scenarios]
+        website = WEBSITES[(i // n_scenarios) % n_websites]
 
         trace = AgentTrace(
             metadata=TraceMetadata(
