@@ -14,7 +14,7 @@ Usage:
 Author: Sergio Talavera
 Project: Early Failure Detection in Web Navigation Agents via Closed Sequential Pattern Mining
 """
-
+from __future__ import annotations
 import argparse
 import logging
 import sys
