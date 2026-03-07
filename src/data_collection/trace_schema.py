@@ -79,6 +79,8 @@ class SelectorType(Enum):
     CSS = "css"
     NAME = "name"
     TAG = "tag"
+    BID = "bid"
+    TAB = "tab"
     UNKNOWN = "unknown"
 
 

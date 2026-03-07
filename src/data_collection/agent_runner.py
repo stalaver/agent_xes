@@ -174,34 +174,42 @@ class TaskConfig:
 class ActionParser:
     """
     Parse agent output into structured actions.
-    
+
     Handles various action formats from different agent architectures:
+    - BrowserGym: click(16), fill(42, "text"), scroll(0, 300), goto("url"),
+      send_msg_to_user("msg"), click_tab(3), click("[16]")
     - ReAct: "Action: click[#submit-btn]"
-    - BrowserGym: "click('bid123')"
-    - Raw: {"action": "click", "element": "#submit-btn"}
+    - Raw JSON: {"action": "click", "element": "#submit-btn"}
     """
-    
-    # Regex patterns for action parsing
+
+    # BrowserGym actions that take a bid as their first positional argument
+    _BID_ACTIONS = frozenset({
+        "click", "fill", "type", "input", "hover", "focus",
+        "select", "select_option", "dblclick", "check", "uncheck",
+    })
+
+    # Actions where the first argument is a URL or message, not a bid
+    _VALUE_ACTIONS = frozenset({
+        "goto", "navigate", "go_to_url", "send_msg_to_user",
+    })
+
+    # Regex patterns (checked in order; first match wins)
     PATTERNS = {
+        # Broad BrowserGym function-call style: name(...)
+        "browsergym": re.compile(
+            r"(\w+)\s*\(([^)]*)\)",
+            re.IGNORECASE,
+        ),
         # ReAct style: Action: click[selector]
         "react": re.compile(
             r"Action:\s*(\w+)\[([^\]]*)\]",
-            re.IGNORECASE
-        ),
-        # Function call style: click('selector') or click("selector")
-        "function": re.compile(
-            r"(\w+)\s*\(\s*['\"]([^'\"]*)['\"](?:\s*,\s*['\"]([^'\"]*)['\"])?\s*\)",
-            re.IGNORECASE
-        ),
-        # BrowserGym bid style: click(bid='123')
-        "bid": re.compile(
-            r"(\w+)\s*\(\s*bid\s*=\s*['\"]?(\w+)['\"]?\s*\)",
-            re.IGNORECASE
+            re.IGNORECASE,
         ),
     }
-    
+
     ACTION_MAP = {
         "click": ActionType.CLICK,
+        "dblclick": ActionType.CLICK,
         "type": ActionType.TYPE,
         "fill": ActionType.TYPE,
         "input": ActionType.TYPE,
@@ -214,33 +222,47 @@ class ActionParser:
         "select": ActionType.SELECT,
         "select_option": ActionType.SELECT,
         "hover": ActionType.HOVER,
+        "focus": ActionType.HOVER,
         "wait": ActionType.WAIT,
+        "noop": ActionType.WAIT,
         "go_back": ActionType.GO_BACK,
         "go_forward": ActionType.GO_FORWARD,
         "refresh": ActionType.REFRESH,
         "stop": ActionType.STOP,
         "send_msg_to_user": ActionType.STOP,
+        "click_tab": ActionType.CLICK,
+        "check": ActionType.CLICK,
+        "uncheck": ActionType.CLICK,
     }
-    
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
+
     @classmethod
     def parse(cls, action_str: str) -> ActionRecord:
-        """
-        Parse an action string into an ActionRecord.
-        
+        """Parse an action string into an ActionRecord.
+
         Args:
-            action_str: Raw action string from agent output
-            
+            action_str: Raw action string from agent output.
+
         Returns:
-            Parsed ActionRecord
+            Parsed ActionRecord.
         """
         action_str = action_str.strip()
-        
-        # Try each pattern
+
         for pattern_name, pattern in cls.PATTERNS.items():
             match = pattern.search(action_str)
             if match:
-                return cls._create_record(match, pattern_name, action_str)
-        
+                action_name = match.group(1).lower()
+                if action_name not in cls.ACTION_MAP:
+                    continue
+                if pattern_name == "browsergym":
+                    return cls._from_browsergym(
+                        action_name, match.group(2), action_str,
+                    )
+                return cls._from_react(match, action_str)
+
         # Try JSON parsing
         try:
             data = json.loads(action_str)
@@ -248,30 +270,62 @@ class ActionParser:
                 return cls._from_json(data, action_str)
         except json.JSONDecodeError:
             pass
-        
-        # Fallback: unknown action
+
         logger.warning(f"Could not parse action: {action_str[:100]}")
         return ActionRecord(
             type=ActionType.UNKNOWN,
             raw_action=action_str,
         )
-    
+
+    # ------------------------------------------------------------------
+    # BrowserGym parsing
+    # ------------------------------------------------------------------
+
     @classmethod
-    def _create_record(cls, match, pattern_name: str, raw: str) -> ActionRecord:
-        """Create ActionRecord from regex match."""
-        groups = match.groups()
-        action_name = groups[0].lower()
+    def _from_browsergym(
+        cls, action_name: str, raw_args: str, raw: str,
+    ) -> ActionRecord:
+        """Build an ActionRecord from a BrowserGym function-call match.
+
+        Args:
+            action_name: Lowered function name (e.g. "click").
+            raw_args: Everything between the parentheses.
+            raw: Original full action string.
+
+        Returns:
+            ActionRecord with normalized fields.
+        """
         action_type = cls.ACTION_MAP.get(action_name, ActionType.UNKNOWN)
-        
-        selector = groups[1] if len(groups) > 1 else None
-        value = groups[2] if len(groups) > 2 else None
-        
-        # Determine selector type
-        selector_type = cls._infer_selector_type(selector, pattern_name)
-        
-        # For BrowserGym, selector is the bid
-        bid = selector if pattern_name == "bid" else None
-        
+        args = cls._tokenize_args(raw_args)
+
+        selector: Optional[str] = None
+        selector_type: Optional[SelectorType] = None
+        value: Optional[str] = None
+        bid: Optional[str] = None
+
+        if action_name == "click_tab":
+            selector = cls._strip_quotes(args[0]) if args else None
+            selector_type = SelectorType.TAB if selector else None
+
+        elif action_name in ("scroll", "scroll_down", "scroll_up"):
+            pass
+
+        elif action_name in cls._VALUE_ACTIONS:
+            value = cls._strip_quotes(args[0]) if args else None
+
+        elif action_name in cls._BID_ACTIONS:
+            if args:
+                bid = cls._normalize_bid(args[0])
+                selector = bid
+                selector_type = SelectorType.BID
+            if len(args) > 1:
+                value = cls._strip_quotes(args[1])
+
+        else:
+            if args:
+                selector = cls._strip_quotes(args[0])
+                selector_type = cls._infer_selector_type(selector)
+
         return ActionRecord(
             type=action_type,
             selector=selector,
@@ -280,46 +334,118 @@ class ActionParser:
             raw_action=raw,
             bid=bid,
         )
-    
+
+    # ------------------------------------------------------------------
+    # ReAct parsing (fallback for non-BrowserGym agents)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def _from_react(cls, match: re.Match, raw: str) -> ActionRecord:
+        """Build an ActionRecord from a ReAct-style regex match."""
+        action_name = match.group(1).lower()
+        action_type = cls.ACTION_MAP.get(action_name, ActionType.UNKNOWN)
+        selector = match.group(2) if match.lastindex and match.lastindex >= 2 else None
+        selector_type = cls._infer_selector_type(selector)
+
+        return ActionRecord(
+            type=action_type,
+            selector=selector,
+            selector_type=selector_type,
+            raw_action=raw,
+        )
+
+    # ------------------------------------------------------------------
+    # JSON parsing (fallback)
+    # ------------------------------------------------------------------
+
     @classmethod
     def _from_json(cls, data: dict, raw: str) -> ActionRecord:
         """Create ActionRecord from JSON dict."""
         action_name = data.get("action", "").lower()
         action_type = cls.ACTION_MAP.get(action_name, ActionType.UNKNOWN)
-        
+
         selector = data.get("element") or data.get("selector") or data.get("bid")
         value = data.get("value") or data.get("text") or data.get("url")
-        
+
+        bid_raw = data.get("bid")
+        bid = cls._normalize_bid(bid_raw) if bid_raw else None
+
+        if bid:
+            sel_type = SelectorType.BID
+        else:
+            sel_type = cls._infer_selector_type(selector)
+
         return ActionRecord(
             type=action_type,
-            selector=selector,
-            selector_type=cls._infer_selector_type(selector, "json"),
+            selector=bid or selector,
+            selector_type=sel_type,
             value=value,
             raw_action=raw,
-            bid=data.get("bid"),
+            bid=bid,
         )
-    
-    @classmethod
-    def _infer_selector_type(cls, selector: Optional[str], pattern: str) -> Optional[SelectorType]:
-        """Infer the selector type from the selector string."""
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _normalize_bid(raw: str) -> str:
+        """Strip quotes and brackets so '[16]', '"[16]"', '16' all -> '16'."""
+        s = raw.strip().strip("\"'").strip("[]").strip("\"'")
+        return s
+
+    @staticmethod
+    def _strip_quotes(s: str) -> str:
+        """Remove surrounding single or double quotes."""
+        s = s.strip()
+        if len(s) >= 2 and s[0] == s[-1] and s[0] in ("'", '"'):
+            return s[1:-1]
+        return s
+
+    @staticmethod
+    def _tokenize_args(raw_args: str) -> list[str]:
+        """Split comma-separated args, respecting quoted strings."""
+        args: list[str] = []
+        current: list[str] = []
+        in_quotes = False
+        quote_char: Optional[str] = None
+        for ch in raw_args:
+            if ch in ('"', "'") and not in_quotes:
+                in_quotes = True
+                quote_char = ch
+                current.append(ch)
+            elif in_quotes and ch == quote_char:
+                in_quotes = False
+                quote_char = None
+                current.append(ch)
+            elif ch == "," and not in_quotes:
+                token = "".join(current).strip()
+                if token:
+                    args.append(token)
+                current = []
+            else:
+                current.append(ch)
+        trailing = "".join(current).strip()
+        if trailing:
+            args.append(trailing)
+        return args
+
+    @staticmethod
+    def _infer_selector_type(selector: Optional[str]) -> Optional[SelectorType]:
+        """Infer selector type from a CSS/XPath/text selector string."""
         if not selector:
             return None
-        
-        if pattern == "bid":
-            return SelectorType.ID  # BrowserGym IDs
-        
         if selector.startswith("#"):
             return SelectorType.ID
-        elif selector.startswith("."):
+        if selector.startswith("."):
             return SelectorType.CLASS
-        elif selector.startswith("//") or selector.startswith("(//"):
+        if selector.startswith("//") or selector.startswith("(//"):
             return SelectorType.XPATH
-        elif selector.startswith("["):
+        if selector.startswith("["):
             return SelectorType.CSS
-        elif "=" in selector:  # name=value or other attribute
+        if "=" in selector:
             return SelectorType.CSS
-        else:
-            return SelectorType.TEXT
+        return SelectorType.TEXT
 
 
 # =============================================================================
