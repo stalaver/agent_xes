@@ -751,6 +751,29 @@ class BrowserGymAgentRunner(BaseAgentRunner):
 
         return "\n".join(lines)
 
+    _RE_BID_UNQUOTED = re.compile(
+        r"\b(click|fill|type|input|hover|focus|select|select_option|dblclick|check|uncheck)"
+        r"\(\s*(\d+)",
+    )
+
+    @staticmethod
+    def _normalize_action(action_str: str) -> str:
+        """Quote unquoted numeric first arguments for bid-based actions.
+
+        BrowserGym expects bid arguments as strings.  Small LLMs often
+        emit bare integers (e.g. ``click(13)``).  This rewrites them to
+        ``click("13")`` so the environment parses them correctly.
+
+        Args:
+            action_str: Raw action string from the agent.
+
+        Returns:
+            Action string with numeric bids quoted.
+        """
+        def _quote_bid(m: re.Match) -> str:
+            return f'{m.group(1)}("{m.group(2)}"'
+        return BrowserGymAgentRunner._RE_BID_UNQUOTED.sub(_quote_bid, action_str)
+
     def run_task(self, task: TaskConfig) -> AgentTrace:
         """Execute a task using BrowserGym's gymnasium API.
 
@@ -799,6 +822,7 @@ class BrowserGymAgentRunner(BaseAgentRunner):
                 )
 
                 prev_url = obs.get("url", "")
+                action_str = self._normalize_action(action_str)
                 obs, reward, terminated, truncated, info = env.step(action_str)
                 new_url = obs.get("url", "")
 
