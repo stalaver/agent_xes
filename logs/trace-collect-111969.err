@@ -1,0 +1,144 @@
+2026-03-05 22:45:17,616 - src.data_collection.trace_logger - INFO - TraceLogger initialized: data/raw_traces/miniwob/llama-3.2-3b
+2026-03-05 22:45:17,617 - src.data_collection.agent_runner - INFO - Registered BrowserGym environments for miniwob
+2026-03-05 22:45:17,617 - src.data_collection.agent_runner - INFO - Loading model: /home/017557527/cmpe299b/models/llama-3.2-3b
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/254 [00:00<?, ?it/s]Loading weights:   5%|▌         | 13/254 [00:00<00:02, 118.75it/s]Loading weights:  10%|▉         | 25/254 [00:00<00:06, 37.44it/s] Loading weights:  13%|█▎        | 32/254 [00:00<00:05, 37.90it/s]Loading weights:  15%|█▍        | 38/254 [00:00<00:05, 41.18it/s]Loading weights:  17%|█▋        | 44/254 [00:00<00:04, 44.73it/s]Loading weights:  20%|█▉        | 50/254 [00:01<00:05, 34.72it/s]Loading weights:  23%|██▎       | 58/254 [00:01<00:04, 40.77it/s]Loading weights:  25%|██▍       | 63/254 [00:01<00:04, 39.05it/s]Loading weights:  27%|██▋       | 68/254 [00:01<00:04, 40.75it/s]Loading weights:  29%|██▊       | 73/254 [00:01<00:04, 41.46it/s]Loading weights:  31%|███▏      | 80/254 [00:01<00:03, 43.83it/s]Loading weights:  33%|███▎      | 85/254 [00:02<00:03, 44.43it/s]Loading weights:  35%|███▌      | 90/254 [00:02<00:04, 40.79it/s]Loading weights:  37%|███▋      | 95/254 [00:02<00:04, 36.62it/s]Loading weights:  41%|████      | 103/254 [00:02<00:03, 43.42it/s]Loading weights:  43%|████▎     | 108/254 [00:02<00:03, 42.49it/s]Loading weights:  44%|████▍     | 113/254 [00:02<00:04, 33.12it/s]Loading weights:  50%|████▉     | 126/254 [00:03<00:02, 44.14it/s]Loading weights:  53%|█████▎    | 135/254 [00:03<00:02, 42.20it/s]Loading weights:  57%|█████▋    | 144/254 [00:03<00:02, 43.27it/s]Loading weights:  60%|██████    | 153/254 [00:03<00:02, 45.78it/s]Loading weights:  62%|██████▏   | 158/254 [00:03<00:02, 34.70it/s]Loading weights:  65%|██████▌   | 166/254 [00:04<00:02, 35.24it/s]Loading weights:  69%|██████▉   | 176/254 [00:04<00:01, 43.21it/s]Loading weights:  74%|███████▍  | 188/254 [00:04<00:01, 49.19it/s]Loading weights:  78%|███████▊  | 198/254 [00:04<00:01, 55.71it/s]Loading weights:  81%|████████  | 205/254 [00:04<00:00, 51.58it/s]Loading weights:  83%|████████▎ | 211/254 [00:04<00:00, 45.12it/s]Loading weights:  85%|████████▌ | 216/254 [00:05<00:00, 40.83it/s]Loading weights:  89%|████████▊ | 225/254 [00:05<00:00, 42.81it/s]Loading weights:  91%|█████████ | 230/254 [00:05<00:00, 37.74it/s]Loading weights:  94%|█████████▍| 239/254 [00:05<00:00, 42.29it/s]Loading weights: 100%|██████████| 254/254 [00:05<00:00, 44.24it/s]
+2026-03-05 22:46:22,650 - src.data_collection.agent_runner - INFO - Model loaded: llama-3.2-3b
+2026-03-05 22:46:22,650 - src.data_collection.trace_logger - INFO - Started trace 7d3788db-d132-4f81-9e6c-d91d38bf455b for task miniwob.click-test
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libm.so.6: version `GLIBC_2.27' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libc.so.6: version `GLIBC_2.28' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libc.so.6: version `GLIBC_2.25' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+2026-03-05 22:46:22,817 - src.data_collection.agent_runner - ERROR - Task execution error for miniwob.click-test: 'PlaywrightContextManager' object has no attribute '_playwright'
+Traceback (most recent call last):
+  File "/fs/atipa/home/017557527/agent_xes/src/data_collection/agent_runner.py", line 660, in run_task
+    obs, info = env.reset()
+                ^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/wrappers/common.py", line 400, in reset
+    return super().reset(seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/wrappers/common.py", line 293, in reset
+    return env_reset_passive_checker(self.env, seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/utils/passive_env_checker.py", line 185, in env_reset_passive_checker
+    result = env.reset(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/browsergym/core/env.py", line 257, in reset
+    pw: playwright.sync_api.Playwright = _get_global_playwright()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/browsergym/core/__init__.py", line 17, in _get_global_playwright
+    pw = playwright.sync_api.sync_playwright().start()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/sync_api/_context_manager.py", line 84, in start
+    return self.__enter__()
+           ^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/sync_api/_context_manager.py", line 79, in __enter__
+    playwright = self._playwright
+                 ^^^^^^^^^^^^^^^^
+AttributeError: 'PlaywrightContextManager' object has no attribute '_playwright'
+2026-03-05 22:46:22,848 - src.data_collection.trace_logger - INFO - Finalized trace 7d3788db-d132-4f81-9e6c-d91d38bf455b: error, 0 steps
+2026-03-05 22:46:22,856 - src.data_collection.trace_logger - INFO - Started trace c74ae6f0-06d2-401a-a6c1-91b312b7c73a for task miniwob.click-button
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libm.so.6: version `GLIBC_2.27' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libc.so.6: version `GLIBC_2.28' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libc.so.6: version `GLIBC_2.25' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+2026-03-05 22:46:22,862 - src.data_collection.agent_runner - ERROR - Task execution error for miniwob.click-button: 'PlaywrightContextManager' object has no attribute '_playwright'
+Traceback (most recent call last):
+  File "/fs/atipa/home/017557527/agent_xes/src/data_collection/agent_runner.py", line 660, in run_task
+    obs, info = env.reset()
+                ^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/wrappers/common.py", line 400, in reset
+    return super().reset(seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/wrappers/common.py", line 293, in reset
+    return env_reset_passive_checker(self.env, seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/utils/passive_env_checker.py", line 185, in env_reset_passive_checker
+    result = env.reset(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/browsergym/core/env.py", line 257, in reset
+    pw: playwright.sync_api.Playwright = _get_global_playwright()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/browsergym/core/__init__.py", line 17, in _get_global_playwright
+    pw = playwright.sync_api.sync_playwright().start()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/sync_api/_context_manager.py", line 84, in start
+    return self.__enter__()
+           ^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/sync_api/_context_manager.py", line 79, in __enter__
+    playwright = self._playwright
+                 ^^^^^^^^^^^^^^^^
+AttributeError: 'PlaywrightContextManager' object has no attribute '_playwright'
+2026-03-05 22:46:22,864 - src.data_collection.trace_logger - INFO - Finalized trace c74ae6f0-06d2-401a-a6c1-91b312b7c73a: error, 0 steps
+2026-03-05 22:46:22,873 - src.data_collection.trace_logger - INFO - Started trace dd656f93-3ad0-43b5-8f1e-0a709fb33ddd for task miniwob.enter-text
+2026-03-05 22:46:22,876 - asyncio - ERROR - Future exception was never retrieved
+future: <Future finished exception=Exception('Connection closed while reading from the driver')>
+Exception: Connection closed while reading from the driver
+2026-03-05 22:46:22,876 - asyncio - ERROR - Task was destroyed but it is pending!
+task: <Task pending name='Task-3' coro=<Connection.run.<locals>.init() done, defined at /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py:269> wait_for=<Future finished result=None> cb=[ProtocolCallback.__init__.<locals>.cb() at /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py:191]>
+2026-03-05 22:46:22,876 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-6' coro=<Connection.run.<locals>.init() done, defined at /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py:269> exception=Exception('Connection.init: Connection closed while reading from the driver')>
+Traceback (most recent call last):
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 270, in init
+    self.playwright_future.set_result(await self._root_object.initialize())
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 212, in initialize
+    await self._channel.send(
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 59, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 514, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+Exception: Connection.init: Connection closed while reading from the driver
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libm.so.6: version `GLIBC_2.27' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libc.so.6: version `GLIBC_2.28' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node: /lib64/libc.so.6: version `GLIBC_2.25' not found (required by /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/driver/node)
+2026-03-05 22:46:22,881 - src.data_collection.agent_runner - ERROR - Task execution error for miniwob.enter-text: 'PlaywrightContextManager' object has no attribute '_playwright'
+Traceback (most recent call last):
+  File "/fs/atipa/home/017557527/agent_xes/src/data_collection/agent_runner.py", line 660, in run_task
+    obs, info = env.reset()
+                ^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/wrappers/common.py", line 400, in reset
+    return super().reset(seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/core.py", line 333, in reset
+    return self.env.reset(seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/wrappers/common.py", line 293, in reset
+    return env_reset_passive_checker(self.env, seed=seed, options=options)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/gymnasium/utils/passive_env_checker.py", line 185, in env_reset_passive_checker
+    result = env.reset(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/browsergym/core/env.py", line 257, in reset
+    pw: playwright.sync_api.Playwright = _get_global_playwright()
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/browsergym/core/__init__.py", line 17, in _get_global_playwright
+    pw = playwright.sync_api.sync_playwright().start()
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/sync_api/_context_manager.py", line 84, in start
+    return self.__enter__()
+           ^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/sync_api/_context_manager.py", line 79, in __enter__
+    playwright = self._playwright
+                 ^^^^^^^^^^^^^^^^
+AttributeError: 'PlaywrightContextManager' object has no attribute '_playwright'
+2026-03-05 22:46:22,882 - src.data_collection.trace_logger - INFO - Finalized trace dd656f93-3ad0-43b5-8f1e-0a709fb33ddd: error, 0 steps
+2026-03-05 22:46:23,031 - asyncio - ERROR - Task exception was never retrieved
+future: <Task finished name='Task-9' coro=<Connection.run.<locals>.init() done, defined at /home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py:269> exception=Exception('Connection.init: Connection closed while reading from the driver')>
+Traceback (most recent call last):
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 270, in init
+    self.playwright_future.set_result(await self._root_object.initialize())
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 212, in initialize
+    await self._channel.send(
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 59, in send
+    return await self._connection.wrap_api_call(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/017557527/.conda/envs/thesis/lib/python3.11/site-packages/playwright/_impl/_connection.py", line 514, in wrap_api_call
+    raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+Exception: Connection.init: Connection closed while reading from the driver
