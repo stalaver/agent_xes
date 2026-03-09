@@ -1,0 +1,28 @@
+Baseline             |     F1@3 |     F1@5 |     F1@8 |    F1@10
+----------------------------------------------------------------
+frequency_vector     |    0.969 |    0.969 |    0.967 |    0.967
+ngram                |    0.944 |    0.969 |    0.974 |    0.974
+taspm                |    0.000 |    0.000 |    0.000 |    0.000
+process_conformance  |    0.881 |    0.858 |    0.845 |    0.848
+deeplog              |    0.335 |    0.217 |    0.138 |    0.147
+bilstm               |    0.183 |    0.305 |    0.605 |    0.615
+bide_coverage        |    0.000 |    0.359 |    0.420 |    0.452
+
+\begin{table}[ht]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+Baseline & F1@3 & F1@5 & F1@8 & F1@10 \\
+\midrule
+frequency\_vector & 0.969 & 0.969 & 0.967 & 0.967 \\
+ngram & 0.944 & 0.969 & 0.974 & 0.974 \\
+taspm & 0.000 & 0.000 & 0.000 & 0.000 \\
+process\_conformance & 0.881 & 0.858 & 0.845 & 0.848 \\
+deeplog & 0.335 & 0.217 & 0.138 & 0.147 \\
+bilstm & 0.183 & 0.305 & 0.605 & 0.615 \\
+bide\_coverage & 0.000 & 0.359 & 0.420 & 0.452 \\
+\bottomrule
+\end{tabular}
+\caption{Baseline comparison: F1 at varying prefix lengths and cross-site generalization.}
+\label{tab:baseline_comparison}
+\end{table}

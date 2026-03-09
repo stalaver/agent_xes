@@ -44,7 +44,7 @@ class BIDECoverageBaseline(BaseBaseline):
         abstraction_level: int = 1,
         spmf_jar_path: str = "lib/spmf.jar",
         min_precision: float = 0.5,
-        min_sites: int = 2,
+        min_sites: int = 1,
     ) -> None:
         """
         Args:
