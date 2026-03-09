@@ -19,7 +19,9 @@ import argparse
 import json
 import logging
 import math
+import os
 import sys
+from datetime import datetime
 from pathlib import Path
 
 _project_root = Path(__file__).resolve().parent.parent
@@ -119,19 +121,64 @@ def _serialize_value(v: object) -> object:
     return v
 
 
+def build_run_dir(base_output_dir: Path, tag: str = "") -> Path:
+    """Create a timestamped subdirectory for this experiment run.
+
+    Args:
+        base_output_dir: Parent directory for all experiment runs.
+        tag: Optional human-readable label appended to the timestamp.
+
+    Returns:
+        Path to the new run directory (not yet created on disk).
+    """
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    name = f"{timestamp}_{tag}" if tag else timestamp
+    return base_output_dir / name
+
+
+def save_config(args: argparse.Namespace, run_dir: Path) -> None:
+    """Save the CLI arguments as config.json for reproducibility.
+
+    Args:
+        args: Parsed CLI arguments.
+        run_dir: Run directory to write into (must already exist).
+    """
+    config_path = run_dir / "config.json"
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(vars(args), f, indent=2)
+    print(f"   Saved {config_path}")
+
+
+def _update_latest_symlink(base_output_dir: Path, run_dir: Path) -> None:
+    """Point a ``latest`` symlink at the most recent run directory.
+
+    Args:
+        base_output_dir: Parent directory containing all run dirs.
+        run_dir: The run directory to link to.
+    """
+    link_path = base_output_dir / "latest"
+    rel_target = run_dir.relative_to(base_output_dir)
+    if link_path.is_symlink() or link_path.exists():
+        os.remove(link_path)
+    os.symlink(rel_target, link_path)
+    print(f"   Updated {link_path} -> {rel_target}")
+
+
 def save_results(
     results: ExperimentResults,
     summary_text: str,
-    output_dir: Path,
+    run_dir: Path,
+    base_output_dir: Path,
 ) -> None:
     """Persist experiment results and summary table to disk.
 
     Args:
         results: ExperimentResults from the runner.
         summary_text: ASCII + LaTeX summary from summary_table().
-        output_dir: Directory to write output files.
+        run_dir: Timestamped run directory for this experiment.
+        base_output_dir: Parent directory (used for the ``latest`` symlink).
     """
-    output_dir.mkdir(parents=True, exist_ok=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
 
     results_dict = {
         "split_info": results.split_info,
@@ -139,16 +186,18 @@ def save_results(
         "failure_rate": results.failure_rate,
         "per_baseline": _serialize_value(results.per_baseline),
     }
-    results_path = output_dir / "results.json"
+    results_path = run_dir / "results.json"
     with open(results_path, "w", encoding="utf-8") as f:
         json.dump(results_dict, f, indent=2)
 
-    table_path = output_dir / "summary_table.txt"
+    table_path = run_dir / "summary_table.txt"
     with open(table_path, "w", encoding="utf-8") as f:
         f.write(summary_text)
 
     print(f"   Saved {results_path}")
     print(f"   Saved {table_path}")
+
+    _update_latest_symlink(base_output_dir, run_dir)
 
 
 # =========================================================================
@@ -208,6 +257,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Comma-separated baseline names to run (default: all)",
     )
+    parser.add_argument(
+        "--tag",
+        type=str,
+        default="",
+        help="Short label for this run (e.g. 'fix_threshold', 'coarse_symbols')",
+    )
     return parser.parse_args()
 
 
@@ -219,9 +274,10 @@ def main() -> int:
     args = parse_args()
 
     trace_dir = Path(args.trace_dir)
-    output_dir = Path(args.output_dir)
+    base_output_dir = Path(args.output_dir)
     spmf_jar = Path(args.spmf_jar)
     k_values = [int(v.strip()) for v in args.k_values.split(",")]
+    run_dir = build_run_dir(base_output_dir, tag=args.tag)
 
     if args.baselines:
         baseline_names = [b.strip() for b in args.baselines.split(",")]
@@ -292,8 +348,9 @@ def main() -> int:
     print(summary_text)
     print()
 
-    print("[4/4] Saving results...")
-    save_results(results, summary_text, output_dir)
+    print(f"[4/4] Saving results to {run_dir}...")
+    save_results(results, summary_text, run_dir, base_output_dir)
+    save_config(args, run_dir)
     print()
 
     print(f"Split info: {results.split_info}")
