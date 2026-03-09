@@ -9,6 +9,7 @@ Project: Early Failure Detection in Web Navigation Agents via Closed Sequential 
 """
 
 from src.baselines.base import BaseBaseline
+from src.baselines.bide_coverage import BIDECoverageBaseline
 from src.baselines.bilstm import BiLSTMBaseline
 from src.baselines.deeplog import DeepLogBaseline
 from src.baselines.frequency_vector import FrequencyVectorBaseline
@@ -23,10 +24,12 @@ BASELINES: dict[str, type[BaseBaseline]] = {
     ProcessConformanceBaseline.name: ProcessConformanceBaseline,
     DeepLogBaseline.name: DeepLogBaseline,
     BiLSTMBaseline.name: BiLSTMBaseline,
+    BIDECoverageBaseline.name: BIDECoverageBaseline,
 }
 
 __all__ = [
     "BaseBaseline",
+    "BIDECoverageBaseline",
     "BiLSTMBaseline",
     "DeepLogBaseline",
     "FrequencyVectorBaseline",
