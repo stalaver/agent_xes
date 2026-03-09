@@ -89,6 +89,6 @@ class BaseBaseline(ABC):
             1-D int array of binary labels.
         """
         return np.array(
-            [1 if e.outcome == TaskOutcome.FAILURE else 0 for e in entries],
+            [1 if e.outcome.is_failure else 0 for e in entries],
             dtype=np.int32,
         )

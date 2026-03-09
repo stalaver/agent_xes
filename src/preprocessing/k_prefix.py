@@ -117,10 +117,10 @@ class PrefixDataset:
         return [entry.trace_id for entry in self.entries]
 
     def get_failed_entries(self) -> list[PrefixEntry]:
-        """Return entries whose outcome is FAILURE."""
+        """Return entries whose outcome is not SUCCESS (binary classification)."""
         return [
             e for e in self.entries
-            if e.outcome == TaskOutcome.FAILURE
+            if e.outcome.is_failure
         ]
 
     def get_successful_entries(self) -> list[PrefixEntry]:

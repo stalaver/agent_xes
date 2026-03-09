@@ -280,6 +280,16 @@ def run_offline_pipeline(
         print(f"   Sample: {dataset.entries[0].symbols[:5]}...")
 
     dataset.save(output_dir / "prefix_dataset.json")
+
+    n_websites = len(dataset.websites)
+    if n_websites < min_sites:
+        print(f"   WARNING: Only {n_websites} website(s) in dataset, "
+              f"lowering min_sites from {min_sites} to {n_websites}")
+        logger.warning(
+            "Only %d website(s) in dataset, lowering min_sites from %d to %d",
+            n_websites, min_sites, n_websites,
+        )
+        min_sites = n_websites
     print()
 
     # Step 2: Prepare SPMF input & run BIDE
@@ -459,7 +469,7 @@ def main() -> int:
         print("ERROR: No traces loaded")
         return 1
 
-    failures = sum(1 for t in traces if t.metadata.outcome == TaskOutcome.FAILURE)
+    failures = sum(1 for t in traces if t.metadata.outcome.is_failure)
     successes = len(traces) - failures
     print(f"Loaded {len(traces)} traces ({failures} failures, {successes} successes)")
     print()

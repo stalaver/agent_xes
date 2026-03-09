@@ -370,7 +370,7 @@ class TraceLogger:
         directory = directory or self._output_dir
         
         # Process individual JSON files
-        for filepath in directory.glob("*.json"):
+        for filepath in directory.rglob("*.json"):
             try:
                 with open(filepath, "r", encoding="utf-8") as f:
                     trace = AgentTrace.from_json(f.read())
@@ -380,7 +380,7 @@ class TraceLogger:
                 logger.error(f"Error loading {filepath}: {e}")
         
         # Process compressed files
-        for filepath in directory.glob("*.json.gz"):
+        for filepath in directory.rglob("*.json.gz"):
             try:
                 with gzip.open(filepath, "rt", encoding="utf-8") as f:
                     trace = AgentTrace.from_json(f.read())
@@ -390,7 +390,7 @@ class TraceLogger:
                 logger.error(f"Error loading {filepath}: {e}")
         
         # Process JSON Lines files
-        for filepath in list(directory.glob("*.jsonl")) + list(directory.glob("*.jsonl.gz")):
+        for filepath in list(directory.rglob("*.jsonl")) + list(directory.rglob("*.jsonl.gz")):
             try:
                 if filepath.suffix == ".gz":
                     open_func = lambda: gzip.open(filepath, "rt", encoding="utf-8")

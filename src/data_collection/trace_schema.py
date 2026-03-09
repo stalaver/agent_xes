@@ -29,6 +29,11 @@ class TaskOutcome(Enum):
     ERROR = "error"
     UNKNOWN = "unknown"
 
+    @property
+    def is_failure(self) -> bool:
+        """Binary classification: anything other than SUCCESS is a failure."""
+        return self is not TaskOutcome.SUCCESS
+
 
 class FailureType(Enum):
     """

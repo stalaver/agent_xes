@@ -86,7 +86,7 @@ class BIDECoverageBaseline(BaseBaseline):
 
         failure_seqs = [
             e.symbols for e in entries
-            if e.outcome == TaskOutcome.FAILURE and e.symbols
+            if e.outcome.is_failure and e.symbols
         ]
 
         if len(failure_seqs) < 2:

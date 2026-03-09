@@ -106,7 +106,7 @@ class RankerConfig:
     """
 
     min_precision: float = 0.5
-    min_sites: int = 2
+    min_sites: int = 1
     min_support: int = 2
 
     def to_dict(self) -> dict:
@@ -234,7 +234,7 @@ class PatternRanker:
             )
 
         failed_entries = [
-            e for e in matching_entries if e.outcome == TaskOutcome.FAILURE
+            e for e in matching_entries if e.outcome.is_failure
         ]
         precision = len(failed_entries) / total_matches
 
