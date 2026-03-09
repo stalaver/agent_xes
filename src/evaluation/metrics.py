@@ -28,6 +28,49 @@ from src.preprocessing.k_prefix import PrefixEntry
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_THRESHOLD = 0.5
+
+
+def find_optimal_threshold(
+    y_true: list[int],
+    y_scores: list[float],
+    num_thresholds: int = 200,
+) -> float:
+    """Sweep thresholds on a validation set and return the one maximizing macro-F1.
+
+    Uses ``average='macro'`` (mean of per-class F1) so that the trivial
+    all-failure predictor — which achieves perfect failure-F1 but zero
+    success-F1 — is penalized under heavy class imbalance.
+
+    Args:
+        y_true: Ground-truth binary labels (1=failure, 0=success).
+        y_scores: Predicted failure scores in [0, 1].
+        num_thresholds: Number of evenly-spaced candidates to evaluate.
+
+    Returns:
+        Threshold in [0, 1] that maximizes macro-F1.  Falls back to 0.5
+        when inputs are degenerate (empty, single-class, or all-zero F1).
+    """
+    y_true_arr = np.asarray(y_true, dtype=np.int32)
+    y_scores_arr = np.asarray(y_scores, dtype=np.float64)
+
+    if len(y_true_arr) == 0 or len(np.unique(y_true_arr)) < 2:
+        return DEFAULT_THRESHOLD
+
+    best_f1 = -1.0
+    best_t = DEFAULT_THRESHOLD
+    for t in np.linspace(0.0, 1.0, num_thresholds):
+        y_pred = (y_scores_arr >= t).astype(np.int32)
+        f1 = float(f1_score(y_true_arr, y_pred, average="macro", zero_division=0))
+        if f1 > best_f1:
+            best_f1 = f1
+            best_t = float(t)
+
+    if best_f1 == 0.0:
+        return DEFAULT_THRESHOLD
+
+    return best_t
+
 
 class MetricsCalculator:
     """Compute all thesis evaluation metrics."""
@@ -71,6 +114,7 @@ class MetricsCalculator:
         baseline: BaseBaseline,
         entries: list[PrefixEntry],
         k_values: list[int] | None = None,
+        thresholds: dict[int, float] | None = None,
     ) -> dict[int, dict[str, float]]:
         """Compute metrics at each prefix length k.
 
@@ -78,23 +122,29 @@ class MetricsCalculator:
             baseline: A fitted baseline that supports predict_at_k.
             entries: Test entries with symbols and outcome labels.
             k_values: Prefix lengths to evaluate. Defaults to [3, 5, 8, 10].
+            thresholds: Per-k decision thresholds (e.g. tuned on a val set).
+                Missing k values fall back to ``DEFAULT_THRESHOLD``.
 
         Returns:
             Mapping from k to metrics dict.
         """
         if k_values is None:
             k_values = [3, 5, 8, 10]
+        if thresholds is None:
+            thresholds = {}
 
         y_true = BaseBaseline._labels_from_entries(entries).tolist()
         results: dict[int, dict[str, float]] = {}
 
         for k in k_values:
             scores = [baseline.predict_at_k(e.symbols, k) for e in entries]
-            results[k] = self.compute_binary_metrics(y_true, scores)
+            t = thresholds.get(k, DEFAULT_THRESHOLD)
+            results[k] = self.compute_binary_metrics(y_true, scores, threshold=t)
             logger.debug(
-                "Baseline %s @ k=%d — F1=%.3f, AUC-PR=%.3f",
+                "Baseline %s @ k=%d (thr=%.3f) — F1=%.3f, AUC-PR=%.3f",
                 baseline.name,
                 k,
+                t,
                 results[k]["f1"],
                 results[k]["auc_pr"],
             )
@@ -107,6 +157,7 @@ class MetricsCalculator:
         train_entries: list[PrefixEntry],
         holdout_entries: list[PrefixEntry],
         in_dist_auc_pr: float = float("nan"),
+        threshold: float = DEFAULT_THRESHOLD,
     ) -> dict[str, float]:
         """Evaluate cross-site generalization on holdout websites.
 
@@ -119,6 +170,7 @@ class MetricsCalculator:
             holdout_entries: Entries from held-out websites.
             in_dist_auc_pr: In-distribution AUC-PR from test-set evaluation,
                 used to compute the generalization delta.
+            threshold: Decision boundary for binary predictions (tuned on val).
 
         Returns:
             Holdout metrics dict with an additional ``auc_delta`` key
@@ -133,7 +185,7 @@ class MetricsCalculator:
 
         y_true = BaseBaseline._labels_from_entries(holdout_entries).tolist()
         scores = [fresh.predict(e.symbols) for e in holdout_entries]
-        metrics = self.compute_binary_metrics(y_true, scores)
+        metrics = self.compute_binary_metrics(y_true, scores, threshold=threshold)
 
         holdout_auc_pr = metrics["auc_pr"]
         metrics["auc_delta"] = (

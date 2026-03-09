@@ -18,7 +18,7 @@ import numpy as np
 
 from src.baselines.base import BaseBaseline
 from src.evaluation.data_split import DataSplitter
-from src.evaluation.metrics import MetricsCalculator
+from src.evaluation.metrics import DEFAULT_THRESHOLD, MetricsCalculator, find_optimal_threshold
 from src.preprocessing.k_prefix import PrefixDataset, PrefixEntry
 
 logger = logging.getLogger(__name__)
@@ -120,24 +120,61 @@ class ExperimentRunner:
 
             baseline.fit(split.train)
 
+            thresholds = self._tune_thresholds(baseline, split.val)
+            logger.info(
+                "Tuned thresholds for %s: %s",
+                baseline.name,
+                {k: round(t, 4) for k, t in thresholds.items()},
+            )
+
             at_k = self._metrics.compute_at_k(
-                baseline, split.test, self._k_values
+                baseline, split.test, self._k_values, thresholds=thresholds
             )
 
             cross_site: dict | None = None
             if split.holdout:
                 max_k = max(self._k_values)
                 in_dist_auc_pr = at_k.get(max_k, {}).get("auc_pr", float("nan"))
+                cs_threshold = thresholds.get(max_k, DEFAULT_THRESHOLD)
                 cross_site = self._metrics.compute_cross_site(
-                    baseline, split.train, split.holdout, in_dist_auc_pr
+                    baseline, split.train, split.holdout, in_dist_auc_pr,
+                    threshold=cs_threshold,
                 )
 
             results.per_baseline[baseline.name] = {
                 "at_k": at_k,
                 "cross_site": cross_site,
+                "thresholds": thresholds,
             }
 
         return results
+
+    def _tune_thresholds(
+        self,
+        baseline: BaseBaseline,
+        val_entries: list[PrefixEntry],
+    ) -> dict[int, float]:
+        """Find the F1-optimal threshold per k on the validation split.
+
+        Args:
+            baseline: A fitted baseline.
+            val_entries: Validation entries with symbols and outcome labels.
+
+        Returns:
+            Mapping from k to the optimal threshold.  Falls back to
+            ``DEFAULT_THRESHOLD`` when the val set is empty or degenerate.
+        """
+        thresholds: dict[int, float] = {}
+        if not val_entries:
+            return {k: DEFAULT_THRESHOLD for k in self._k_values}
+
+        val_labels = BaseBaseline._labels_from_entries(val_entries).tolist()
+
+        for k in self._k_values:
+            val_scores = [baseline.predict_at_k(e.symbols, k) for e in val_entries]
+            thresholds[k] = find_optimal_threshold(val_labels, val_scores)
+
+        return thresholds
 
     def summary_table(self, results: ExperimentResults) -> str:
         """Produce human-readable and LaTeX summary tables.
@@ -272,6 +309,7 @@ class ExperimentRunner:
         hdr_parts = [
             "Baseline".ljust(20),
             "K".rjust(4),
+            "Thr".rjust(6),
             *(h.rjust(9) for h in self._DETAIL_HEADERS),
         ]
         header = " | ".join(hdr_parts)
@@ -284,11 +322,14 @@ class ExperimentRunner:
         ]
 
         for name, data in results.per_baseline.items():
+            thr_map = data.get("thresholds", {})
             for k in results.k_values:
                 m = data["at_k"].get(k, {})
+                t = thr_map.get(k, DEFAULT_THRESHOLD)
                 parts = [
                     name.ljust(20),
                     str(k).rjust(4),
+                    self._fmt(t).rjust(6),
                     *(self._fmt(m.get(key, float("nan"))).rjust(9)
                       for key in self._DETAIL_METRICS),
                 ]
@@ -300,6 +341,7 @@ class ExperimentRunner:
                 parts = [
                     "majority (all-fail)".ljust(20),
                     str(k).rjust(4),
+                    self._fmt(DEFAULT_THRESHOLD).rjust(6),
                     *(self._fmt(maj.get(key, float("nan"))).rjust(9)
                       for key in self._DETAIL_METRICS),
                 ]
@@ -309,7 +351,7 @@ class ExperimentRunner:
 
     def _latex_detail_table(self, results: ExperimentResults) -> str:
         """Build a detailed per-(baseline, K) LaTeX table."""
-        n_cols = 2 + len(self._DETAIL_HEADERS)
+        n_cols = 3 + len(self._DETAIL_HEADERS)
         col_spec = "l" + "r" * (n_cols - 1)
 
         lines: list[str] = [
@@ -319,16 +361,19 @@ class ExperimentRunner:
             r"\toprule",
         ]
 
-        header_cells = ["Baseline", "K", *self._DETAIL_HEADERS]
+        header_cells = ["Baseline", "K", "Thr", *self._DETAIL_HEADERS]
         lines.append(" & ".join(header_cells) + r" \\")
         lines.append(r"\midrule")
 
         for name, data in results.per_baseline.items():
+            thr_map = data.get("thresholds", {})
             for k in results.k_values:
                 m = data["at_k"].get(k, {})
+                t = thr_map.get(k, DEFAULT_THRESHOLD)
                 cells = [
                     name.replace("_", r"\_"),
                     str(k),
+                    self._fmt(t),
                     *(self._fmt(m.get(key, float("nan")))
                       for key in self._DETAIL_METRICS),
                 ]
@@ -341,6 +386,7 @@ class ExperimentRunner:
                 cells = [
                     r"majority (all-fail)",
                     str(k),
+                    self._fmt(DEFAULT_THRESHOLD),
                     *(self._fmt(maj.get(key, float("nan")))
                       for key in self._DETAIL_METRICS),
                 ]
