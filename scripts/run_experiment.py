@@ -136,6 +136,7 @@ def save_results(
     results_dict = {
         "split_info": results.split_info,
         "k_values": results.k_values,
+        "failure_rate": results.failure_rate,
         "per_baseline": _serialize_value(results.per_baseline),
     }
     results_path = output_dir / "results.json"

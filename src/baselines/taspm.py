@@ -48,6 +48,7 @@ class TaSPMBaseline(BaseBaseline):
         self.spmf_jar = Path(spmf_jar)
         self.patterns_: list[RawPattern] = []
         self._work_dir: tempfile.TemporaryDirectory[str] | None = None
+        self._predict_calls: int = 0
 
     # ------------------------------------------------------------------
     # BaseBaseline interface
@@ -61,6 +62,7 @@ class TaSPMBaseline(BaseBaseline):
         """
         self._cleanup_work_dir()
         self._work_dir = tempfile.TemporaryDirectory(prefix="taspm_")
+        self._predict_calls = 0
 
         failure_seqs = [
             e.symbols for e in entries
@@ -111,10 +113,30 @@ class TaSPMBaseline(BaseBaseline):
             1 for p in self.patterns_
             if _is_subsequence(p.symbols, symbols)
         )
-        return matched / len(self.patterns_)
+        score = matched / len(self.patterns_)
+
+        if self._predict_calls < 5:
+            logger.debug(
+                "TaSPM.predict() call #%d: %d/%d patterns matched, "
+                "score=%.4f, input_len=%d",
+                self._predict_calls,
+                matched,
+                len(self.patterns_),
+                score,
+                len(symbols),
+            )
+        self._predict_calls += 1
+
+        return score
 
     def predict_at_k(self, symbols: list[str], k: int) -> float:
         """Return failure probability using only the first *k* symbols.
+
+        Filters patterns to those with length <= k so the denominator
+        reflects only patterns that could possibly match a k-length
+        prefix.  Note: these short patterns were still mined from
+        full-length failure sequences, not k-prefixes — an architectural
+        difference from the BIDE-coverage approach worth discussing.
 
         Args:
             symbols: Full symbolized sequence.
@@ -123,7 +145,16 @@ class TaSPMBaseline(BaseBaseline):
         Returns:
             Failure probability in [0.0, 1.0].
         """
-        return self.predict(symbols[:k])
+        prefix = symbols[:k]
+        eligible = [p for p in self.patterns_ if len(p.symbols) <= k]
+        if not eligible:
+            return 0.0
+
+        matched = sum(
+            1 for p in eligible
+            if _is_subsequence(p.symbols, prefix)
+        )
+        return matched / len(eligible)
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -153,5 +184,15 @@ def _is_subsequence(pattern: list[str], sequence: list[str]) -> bool:
     Returns:
         True if every symbol in *pattern* appears in *sequence* in order.
     """
-    it = iter(sequence)
-    return all(symbol in it for symbol in pattern)
+    if not pattern:
+        return True
+    if len(pattern) > len(sequence):
+        return False
+
+    pat_idx = 0
+    for symbol in sequence:
+        if symbol == pattern[pat_idx]:
+            pat_idx += 1
+            if pat_idx == len(pattern):
+                return True
+    return False

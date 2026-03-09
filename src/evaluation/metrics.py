@@ -57,6 +57,9 @@ class MetricsCalculator:
             "precision": float(precision_score(y_true_arr, y_pred, zero_division=0)),
             "recall": float(recall_score(y_true_arr, y_pred, zero_division=0)),
             "f1": float(f1_score(y_true_arr, y_pred, zero_division=0)),
+            "f1_success": float(
+                f1_score(y_true_arr, y_pred, pos_label=0, zero_division=0)
+            ),
             "accuracy": float(accuracy_score(y_true_arr, y_pred)),
             "auc_roc": self._safe_roc_auc(y_true_arr, y_scores_arr),
             "auc_pr": self._safe_avg_precision(y_true_arr, y_scores_arr),
@@ -174,6 +177,7 @@ class MetricsCalculator:
             "precision": float("nan"),
             "recall": float("nan"),
             "f1": float("nan"),
+            "f1_success": float("nan"),
             "accuracy": float("nan"),
             "auc_roc": float("nan"),
             "auc_pr": float("nan"),

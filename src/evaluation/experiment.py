@@ -34,11 +34,14 @@ class ExperimentResults:
             ``cross_site`` (metrics dict or None).
         split_info: Counts of train/val/test/holdout entries.
         k_values: Prefix lengths that were evaluated.
+        failure_rate: Fraction of failure labels in the test split,
+            used to compute the majority-class baseline row.
     """
 
     per_baseline: dict[str, dict] = field(default_factory=dict)
     split_info: dict[str, int] = field(default_factory=dict)
     k_values: list[int] = field(default_factory=list)
+    failure_rate: float = 0.0
 
 
 class ExperimentRunner:
@@ -86,9 +89,13 @@ class ExperimentRunner:
             seed=self._seed,
         )
 
+        test_labels = BaseBaseline._labels_from_entries(split.test)
+        failure_rate = float(test_labels.mean()) if len(test_labels) > 0 else 0.0
+
         results = ExperimentResults(
             split_info=split.summary(),
             k_values=list(self._k_values),
+            failure_rate=failure_rate,
         )
 
         train_labels = BaseBaseline._labels_from_entries(split.train)
@@ -135,16 +142,24 @@ class ExperimentRunner:
     def summary_table(self, results: ExperimentResults) -> str:
         """Produce human-readable and LaTeX summary tables.
 
+        Includes a compact F1@K comparison table followed by a detailed
+        per-(baseline, K) table with precision, recall, F1, F1(success),
+        and AUC-PR. Both ASCII and LaTeX versions are generated.
+
         Args:
             results: Output from :meth:`run`.
 
         Returns:
-            String containing an ASCII table followed by a LaTeX tabular block.
+            String containing ASCII tables followed by LaTeX tabular blocks.
         """
         lines: list[str] = []
         lines.append(self._ascii_table(results))
         lines.append("")
+        lines.append(self._ascii_detail_table(results))
+        lines.append("")
         lines.append(self._latex_table(results))
+        lines.append("")
+        lines.append(self._latex_detail_table(results))
         return "\n".join(lines)
 
     # ------------------------------------------------------------------
@@ -224,6 +239,120 @@ class ExperimentRunner:
         lines.append(r"\end{tabular}")
         lines.append(r"\caption{Baseline comparison: F1 at varying prefix lengths and cross-site generalization.}")
         lines.append(r"\label{tab:baseline_comparison}")
+        lines.append(r"\end{table}")
+
+        return "\n".join(lines)
+
+    def _majority_row(self, failure_rate: float) -> dict[str, float]:
+        """Compute metrics for an 'always predict failure' baseline.
+
+        With threshold 0.5 and score=1.0 for every sample, y_pred is
+        all-ones.  Precision = failure_rate, recall = 1.0.
+        """
+        p = failure_rate
+        f1 = (2 * p * 1.0) / (p + 1.0) if p > 0 else 0.0
+        f1_suc = 0.0
+        return {
+            "precision": p,
+            "recall": 1.0,
+            "f1": f1,
+            "f1_success": f1_suc,
+            "auc_pr": float("nan"),
+        }
+
+    # ------------------------------------------------------------------
+    # Detail tables
+    # ------------------------------------------------------------------
+
+    _DETAIL_METRICS = ("precision", "recall", "f1", "f1_success", "auc_pr")
+    _DETAIL_HEADERS = ("Prec", "Recall", "F1", "F1(suc)", "AUC-PR")
+
+    def _ascii_detail_table(self, results: ExperimentResults) -> str:
+        """Build a detailed per-(baseline, K) ASCII table."""
+        hdr_parts = [
+            "Baseline".ljust(20),
+            "K".rjust(4),
+            *(h.rjust(9) for h in self._DETAIL_HEADERS),
+        ]
+        header = " | ".join(hdr_parts)
+        sep = "-" * len(header)
+
+        rows: list[str] = [
+            "Detailed metrics per (baseline, K):",
+            header,
+            sep,
+        ]
+
+        for name, data in results.per_baseline.items():
+            for k in results.k_values:
+                m = data["at_k"].get(k, {})
+                parts = [
+                    name.ljust(20),
+                    str(k).rjust(4),
+                    *(self._fmt(m.get(key, float("nan"))).rjust(9)
+                      for key in self._DETAIL_METRICS),
+                ]
+                rows.append(" | ".join(parts))
+
+        if results.failure_rate > 0:
+            maj = self._majority_row(results.failure_rate)
+            for k in results.k_values:
+                parts = [
+                    "majority (all-fail)".ljust(20),
+                    str(k).rjust(4),
+                    *(self._fmt(maj.get(key, float("nan"))).rjust(9)
+                      for key in self._DETAIL_METRICS),
+                ]
+                rows.append(" | ".join(parts))
+
+        return "\n".join(rows)
+
+    def _latex_detail_table(self, results: ExperimentResults) -> str:
+        """Build a detailed per-(baseline, K) LaTeX table."""
+        n_cols = 2 + len(self._DETAIL_HEADERS)
+        col_spec = "l" + "r" * (n_cols - 1)
+
+        lines: list[str] = [
+            r"\begin{table}[ht]",
+            r"\centering",
+            rf"\begin{{tabular}}{{{col_spec}}}",
+            r"\toprule",
+        ]
+
+        header_cells = ["Baseline", "K", *self._DETAIL_HEADERS]
+        lines.append(" & ".join(header_cells) + r" \\")
+        lines.append(r"\midrule")
+
+        for name, data in results.per_baseline.items():
+            for k in results.k_values:
+                m = data["at_k"].get(k, {})
+                cells = [
+                    name.replace("_", r"\_"),
+                    str(k),
+                    *(self._fmt(m.get(key, float("nan")))
+                      for key in self._DETAIL_METRICS),
+                ]
+                lines.append(" & ".join(cells) + r" \\")
+
+        if results.failure_rate > 0:
+            lines.append(r"\midrule")
+            maj = self._majority_row(results.failure_rate)
+            for k in results.k_values:
+                cells = [
+                    r"majority (all-fail)",
+                    str(k),
+                    *(self._fmt(maj.get(key, float("nan")))
+                      for key in self._DETAIL_METRICS),
+                ]
+                lines.append(" & ".join(cells) + r" \\")
+
+        lines.append(r"\bottomrule")
+        lines.append(r"\end{tabular}")
+        lines.append(
+            r"\caption{Detailed per-prefix-length metrics with "
+            r"majority-class reference.}"
+        )
+        lines.append(r"\label{tab:detailed_metrics}")
         lines.append(r"\end{table}")
 
         return "\n".join(lines)

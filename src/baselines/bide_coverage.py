@@ -39,7 +39,7 @@ class BIDECoverageBaseline(BaseBaseline):
 
     def __init__(
         self,
-        min_support: float = 0.3,
+        min_support: float = 0.05,
         top_k_patterns: int = 50,
         abstraction_level: int = 1,
         spmf_jar_path: str = "lib/spmf.jar",
