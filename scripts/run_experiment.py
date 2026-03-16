@@ -69,6 +69,7 @@ def load_traces(trace_dir: Path) -> list[AgentTrace]:
 def instantiate_baselines(
     names: list[str],
     spmf_jar: Path,
+    ngram_ns: tuple[int, ...] | None = None,
 ) -> list[BaseBaseline]:
     """Instantiate baseline objects from the registry.
 
@@ -78,6 +79,7 @@ def instantiate_baselines(
     Args:
         names: Baseline names to instantiate (keys in BASELINES).
         spmf_jar: Path to spmf.jar for SPMF-dependent baselines.
+        ngram_ns: Optional n-gram sizes to pass to NGramBaseline.
 
     Returns:
         List of instantiated BaseBaseline objects.
@@ -99,6 +101,8 @@ def instantiate_baselines(
             instances.append(cls(spmf_jar_path=str(spmf_jar)))
         elif name == "taspm":
             instances.append(cls(spmf_jar=str(spmf_jar)))
+        elif name == "ngram" and ngram_ns is not None:
+            instances.append(cls(ns=ngram_ns))
         else:
             instances.append(cls())
 
@@ -259,6 +263,12 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated baseline names to run (default: all)",
     )
     parser.add_argument(
+        "--ngram-ns",
+        type=str,
+        default=None,
+        help="Comma-separated n-gram sizes for NGramBaseline (e.g. '2,3,4,5,8,10')",
+    )
+    parser.add_argument(
         "--tag",
         type=str,
         default="",
@@ -363,8 +373,10 @@ def main() -> int:
         print()
 
     # --- Instantiate baselines ---
+    ngram_ns = tuple(int(v.strip()) for v in args.ngram_ns.split(",")) if args.ngram_ns else None
+
     print("[2/4] Instantiating baselines...")
-    baseline_instances = instantiate_baselines(baseline_names, spmf_jar)
+    baseline_instances = instantiate_baselines(baseline_names, spmf_jar, ngram_ns=ngram_ns)
 
     if not baseline_instances:
         print("ERROR: No baselines could be instantiated")
