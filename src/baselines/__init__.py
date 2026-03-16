@@ -15,6 +15,7 @@ from src.baselines.deeplog import DeepLogBaseline
 from src.baselines.frequency_vector import FrequencyVectorBaseline
 from src.baselines.ngram import NGramBaseline
 from src.baselines.process_conformance import ProcessConformanceBaseline
+from src.baselines.step_count import StepCountBaseline
 from src.baselines.taspm import TaSPMBaseline
 
 BASELINES: dict[str, type[BaseBaseline]] = {
@@ -25,6 +26,7 @@ BASELINES: dict[str, type[BaseBaseline]] = {
     DeepLogBaseline.name: DeepLogBaseline,
     BiLSTMBaseline.name: BiLSTMBaseline,
     BIDECoverageBaseline.name: BIDECoverageBaseline,
+    StepCountBaseline.name: StepCountBaseline,
 }
 
 __all__ = [
@@ -36,5 +38,6 @@ __all__ = [
     "NGramBaseline",
     "TaSPMBaseline",
     "ProcessConformanceBaseline",
+    "StepCountBaseline",
     "BASELINES",
 ]

@@ -20,6 +20,7 @@ import json
 import logging
 import math
 import os
+import random
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -263,6 +264,24 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="Short label for this run (e.g. 'fix_threshold', 'coarse_symbols')",
     )
+    parser.add_argument(
+        "--balanced",
+        action="store_true",
+        default=False,
+        help="Downsample majority class to match minority class size",
+    )
+    parser.add_argument(
+        "--exclude-errors",
+        action="store_true",
+        default=False,
+        help="Remove traces with outcome 'error' before building the dataset",
+    )
+    parser.add_argument(
+        "--exclude-timeouts",
+        action="store_true",
+        default=False,
+        help="Remove traces with outcome 'timeout' before building the dataset",
+    )
     return parser.parse_args()
 
 
@@ -304,6 +323,20 @@ def main() -> int:
     print(f"Websites: {websites}")
     print()
 
+    if args.exclude_errors:
+        original_count = len(traces)
+        traces = [t for t in traces if t.metadata.outcome != TaskOutcome.ERROR]
+        removed = original_count - len(traces)
+        print(f"   Excluded {removed} error traces ({original_count} -> {len(traces)})")
+        print()
+
+    if args.exclude_timeouts:
+        original_count = len(traces)
+        traces = [t for t in traces if t.metadata.outcome != TaskOutcome.TIMEOUT]
+        removed = original_count - len(traces)
+        print(f"   Excluded {removed} timeout traces ({original_count} -> {len(traces)})")
+        print()
+
     # --- Build PrefixDataset ---
     print("[1/4] Symbolizing traces and extracting k-prefixes...")
     symbolizer = TraceSymbolizer(abstraction_level=args.abstraction_level)
@@ -313,6 +346,21 @@ def main() -> int:
     print(f"   Prefixes: {len(dataset)}")
     print(f"   Outcomes: {summary['outcomes']}")
     print()
+
+    if args.balanced:
+        fail_entries = dataset.get_failed_entries()
+        succ_entries = dataset.get_successful_entries()
+        orig_fail, orig_succ = len(fail_entries), len(succ_entries)
+        min_size = min(orig_fail, orig_succ)
+        rng = random.Random(args.seed)
+        if orig_fail > min_size:
+            fail_entries = rng.sample(fail_entries, min_size)
+        if orig_succ > min_size:
+            succ_entries = rng.sample(succ_entries, min_size)
+        dataset.entries = fail_entries + succ_entries
+        print(f"   Balanced: {orig_fail} failures, {orig_succ} successes -> "
+              f"{len(fail_entries)} failures, {len(succ_entries)} successes")
+        print()
 
     # --- Instantiate baselines ---
     print("[2/4] Instantiating baselines...")
