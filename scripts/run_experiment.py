@@ -292,6 +292,12 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Remove traces with outcome 'timeout' before building the dataset",
     )
+    parser.add_argument(
+        "--fixed-threshold",
+        type=float,
+        default=None,
+        help="Use this threshold for all methods/K values instead of per-method tuning",
+    )
     return parser.parse_args()
 
 
@@ -396,6 +402,7 @@ def main() -> int:
         dataset=dataset,
         k_values=k_values,
         seed=args.seed,
+        fixed_threshold=args.fixed_threshold,
     )
     results = runner.run()
 

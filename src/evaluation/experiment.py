@@ -54,6 +54,7 @@ class ExperimentRunner:
         holdout_sites: list[str] | None = None,
         k_values: list[int] | None = None,
         seed: int = 42,
+        fixed_threshold: float | None = None,
     ) -> None:
         """Configure an experiment.
 
@@ -63,12 +64,15 @@ class ExperimentRunner:
             holdout_sites: Websites reserved for cross-site evaluation.
             k_values: Prefix lengths to evaluate. Defaults to [3, 5, 8, 10].
             seed: Random seed for data splitting.
+            fixed_threshold: If set, bypass per-method threshold tuning and
+                use this value for all methods and all K values.
         """
         self._baselines = baselines
         self._dataset = dataset
         self._holdout_sites = holdout_sites
         self._k_values = k_values if k_values is not None else [3, 5, 8, 10]
         self._seed = seed
+        self._fixed_threshold = fixed_threshold
         self._splitter = DataSplitter()
         self._metrics = MetricsCalculator()
 
@@ -120,12 +124,20 @@ class ExperimentRunner:
 
             baseline.fit(split.train)
 
-            thresholds = self._tune_thresholds(baseline, split.val)
-            logger.info(
-                "Tuned thresholds for %s: %s",
-                baseline.name,
-                {k: round(t, 4) for k, t in thresholds.items()},
-            )
+            if self._fixed_threshold is not None:
+                thresholds = {k: self._fixed_threshold for k in self._k_values}
+                logger.info(
+                    "Using fixed threshold %.4f for %s",
+                    self._fixed_threshold,
+                    baseline.name,
+                )
+            else:
+                thresholds = self._tune_thresholds(baseline, split.val)
+                logger.info(
+                    "Tuned thresholds for %s: %s",
+                    baseline.name,
+                    {k: round(t, 4) for k, t in thresholds.items()},
+                )
 
             at_k = self._metrics.compute_at_k(
                 baseline, split.test, self._k_values, thresholds=thresholds
