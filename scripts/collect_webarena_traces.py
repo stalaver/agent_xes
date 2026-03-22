@@ -295,6 +295,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Load model in 4-bit quantization",
     )
+    parser.add_argument(
+        "--rich-observations",
+        action="store_true",
+        help="Populate ObservationRecord from BrowserGym obs dict (last_action_error, open_pages_urls)",
+    )
     return parser.parse_args()
 
 
@@ -321,6 +326,7 @@ def main() -> int:
     print(f"  Max steps   : {args.max_steps}")
     print(f"  Temperature : {args.temperature}")
     print(f"  4-bit       : {args.load_in_4bit}")
+    print(f"  Rich obs    : {args.rich_observations}")
     print()
 
     # --- discover shopping tasks ---
@@ -356,6 +362,7 @@ def main() -> int:
         trace_logger=trace_logger,
         benchmark=BENCHMARK,
         headless=True,
+        rich_observations=args.rich_observations,
     )
 
     # --- pre-load the model so it doesn't count toward task 1 timing ---

@@ -646,10 +646,12 @@ class BrowserGymAgentRunner(BaseAgentRunner):
         trace_logger: TraceLogger,
         benchmark: str = "webarena",
         headless: bool = True,
+        rich_observations: bool = False,
     ):
         super().__init__(agent_config, trace_logger)
         self.benchmark = benchmark
         self.headless = headless
+        self.rich_observations = rich_observations
         self._gymnasium = None
 
         try:
@@ -821,20 +823,55 @@ class BrowserGymAgentRunner(BaseAgentRunner):
                     goal, obs_data, step_num,
                 )
 
-                prev_url = obs.get("url", "")
+                if self.rich_observations:
+                    open_urls = obs.get("open_pages_urls") or [None]
+                    prev_url = open_urls[-1] or ""
+                else:
+                    prev_url = obs.get("url", "")
+
                 action_str = self._normalize_action(action_str)
                 obs, reward, terminated, truncated, info = env.step(action_str)
-                new_url = obs.get("url", "")
 
-                action_error = info.get("action_error", False) if isinstance(info, dict) else False
-                error_msg = str(info.get("error_message", "")) if isinstance(info, dict) and info.get("error_message") else None
+                if self.rich_observations:
+                    open_urls_after = obs.get("open_pages_urls") or [None]
+                    new_url = open_urls_after[-1] or ""
 
-                obs_record = {
-                    "element_found": not action_error,
-                    "element_state": "not_found" if action_error else "visible",
-                    "page_changed": new_url != prev_url,
-                    "error_message": error_msg,
-                }
+                    last_action_error = obs.get("last_action_error", "")
+
+                    if step_num <= 3:
+                        logger.debug(
+                            "Step %d obs keys: %s | last_action_error: %r",
+                            step_num,
+                            list(obs.keys()),
+                            last_action_error,
+                        )
+
+                    if last_action_error:
+                        obs_record = {
+                            "element_found": False,
+                            "element_state": "not_found",
+                            "page_changed": new_url != prev_url,
+                            "error_message": last_action_error,
+                        }
+                    else:
+                        obs_record = {
+                            "element_found": True,
+                            "element_state": "visible",
+                            "page_changed": new_url != prev_url,
+                            "error_message": None,
+                        }
+                else:
+                    new_url = obs.get("url", "")
+
+                    action_error = info.get("action_error", False) if isinstance(info, dict) else False
+                    error_msg = str(info.get("error_message", "")) if isinstance(info, dict) and info.get("error_message") else None
+
+                    obs_record = {
+                        "element_found": not action_error,
+                        "element_state": "not_found" if action_error else "visible",
+                        "page_changed": new_url != prev_url,
+                        "error_message": error_msg,
+                    }
 
                 step = self._create_step(
                     step_num=step_num,
