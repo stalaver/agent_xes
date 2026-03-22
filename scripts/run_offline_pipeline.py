@@ -445,6 +445,18 @@ def parse_args() -> argparse.Namespace:
         default="data/pipeline_test",
         help="Output directory",
     )
+    parser.add_argument(
+        "--exclude-errors",
+        action="store_true",
+        default=False,
+        help="Remove traces with outcome 'error' before mining",
+    )
+    parser.add_argument(
+        "--exclude-timeouts",
+        action="store_true",
+        default=False,
+        help="Remove traces with outcome 'timeout' before mining",
+    )
     return parser.parse_args()
 
 
@@ -473,6 +485,20 @@ def main() -> int:
     successes = len(traces) - failures
     print(f"Loaded {len(traces)} traces ({failures} failures, {successes} successes)")
     print()
+
+    if args.exclude_errors:
+        original_count = len(traces)
+        traces = [t for t in traces if t.metadata.outcome != TaskOutcome.ERROR]
+        removed = original_count - len(traces)
+        print(f"   Excluded {removed} error traces ({original_count} -> {len(traces)})")
+        print()
+
+    if args.exclude_timeouts:
+        original_count = len(traces)
+        traces = [t for t in traces if t.metadata.outcome != TaskOutcome.TIMEOUT]
+        removed = original_count - len(traces)
+        print(f"   Excluded {removed} timeout traces ({original_count} -> {len(traces)})")
+        print()
 
     library = run_offline_pipeline(
         traces,
